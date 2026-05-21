@@ -1,0 +1,7 @@
+fastapi==0.136.0
+uvicorn==0.45.0
+pymupdf==1.27.2.2
+ebooklib==0.20
+Pillow==12.2.0
+python-multipart==0.0.26
+lxml==6.1.0

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Kindle Manga Compressor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .progress-bar { transition: width 0.4s ease; }
+        #logList::-webkit-scrollbar { width: 6px; }
+        #logList::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-slate-800 p-8 rounded-2xl shadow-2xl max-w-md w-full border border-slate-700">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-extrabold text-white tracking-tight">PDF ➔ Kindle</h1>
+            <p class="text-slate-400 text-sm mt-2">Otimizado para o limite de <span class="text-indigo-400 font-bold">50MB</span></p>
+        </header>
+
+        <form id="uploadForm" class="space-y-5">
+            <div class="space-y-3">
+                <input type="text" id="bookTitle" placeholder="Título do Mangá" class="w-full bg-slate-700 border-none rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" required>
+                <input type="text" id="bookAuthor" placeholder="Autor" class="w-full bg-slate-700 border-none rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" required>
+            </div>
+
+            <label id="dropZone" class="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-600 border-dashed rounded-xl cursor-pointer hover:bg-slate-700 transition-all">
+                <div class="text-center">
+                    <p class="text-xs text-slate-400">Arraste seu PDF aqui ou clique</p>
+                    <p id="fileName" class="text-indigo-400 text-xs font-bold mt-2 truncate max-w-[200px]"></p>
+                </div>
+                <input id="pdfFile" type="file" accept=".pdf" class="hidden" required />
+            </label>
+
+            <div class="flex gap-2">
+                <button type="submit" id="submitBtn" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-lg transition-all disabled:opacity-50">Converter</button>
+                <button type="button" id="cancelBtn" class="hidden bg-rose-600 hover:bg-rose-500 px-4 rounded-lg transition-all">✕</button>
+            </div>
+        </form>
+
+        <div id="statusContainer" class="hidden mt-8 space-y-4">
+            <div class="w-full bg-slate-700 rounded-full h-2">
+                <div id="progressBar" class="progress-bar bg-indigo-500 h-2 rounded-full" style="width: 0%"></div>
+            </div>
+            
+            <div id="debugConsole" class="bg-black rounded-lg p-4 h-40 overflow-y-auto border border-slate-700">
+                <ul id="logList" class="text-[10px] font-mono text-emerald-400 space-y-1"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const fileInput = document.getElementById('pdfFile');
+        const fileNameDisplay = document.getElementById('fileName');
+        const submitBtn = document.getElementById('submitBtn');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const progressBar = document.getElementById('progressBar');
+        const statusContainer = document.getElementById('statusContainer');
+        const logList = document.getElementById('logList');
+
+        let jobId = null;
+        let poll = null;
+
+        fileInput.onchange = () => { fileNameDisplay.textContent = fileInput.files[0]?.name || ""; };
+
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('title', document.getElementById('bookTitle').value);
+            formData.append('author', document.getElementById('bookAuthor').value);
+
+            submitBtn.disabled = true;
+            statusContainer.classList.remove('hidden');
+            logList.innerHTML = "";
+            
+            try {
+                const res = await fetch('/convert', { method: 'POST', body: formData });
+                const data = await res.json();
+                jobId = data.job_id;
+                cancelBtn.classList.remove('hidden');
+
+                poll = setInterval(async () => {
+                    const sRes = await fetch(`/status/${jobId}`);
+                    const sData = await sRes.json();
+                    
+                    progressBar.style.width = sData.progress + "%";
+                    
+                    // Render logs
+                    if (sData.logs) {
+                        logList.innerHTML = sData.logs.map(l => `<li>> ${l}</li>`).join('');
+                        logList.scrollTop = logList.scrollHeight;
+                    }
+
+                    if (sData.status === 'completed') {
+                        clearInterval(poll);
+                        window.location.href = `/download/${jobId}`;
+                        submitBtn.disabled = false;
+                        cancelBtn.classList.add('hidden');
+                    } else if (sData.status === 'failed' || sData.status === 'cancelled') {
+                        clearInterval(poll);
+                        submitBtn.disabled = false;
+                        cancelBtn.classList.add('hidden');
+                    }
+                }, 1500);
+            } catch (err) { alert("Erro ao iniciar"); submitBtn.disabled = false; }
+        };
+
+        cancelBtn.onclick = () => fetch(`/cancel/${jobId}`, { method: 'POST' });
+    </script>
+</body>
+</html>
